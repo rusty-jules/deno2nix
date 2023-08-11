@@ -29,34 +29,34 @@
     inherit (inputs) src config importMap;
   };
 
-  compileCmd = ''
-    deno compile --cached-only --lock=${lockfile} --output=${bin} ${entrypoint}
-  '';
+  #compileCmd = ''
+    #deno compile --cached-only --lock=${lockfile} --output=${bin} ${entrypoint}
+  #'';
 
-  #compileCmd = concatStringsSep " " (
-    #[
-      #"deno compile --cached-only"
-      #"--lock=${lockfile}"
+  compileCmd = concatStringsSep " " (
+    [
+      "deno compile --cached-only"
+      "--lock=${lockfile}"
       #"--output=${bin}"
-      ## "--config=${config}"
-    #]
-    ##++ (
-      ##if (isString importMap)
-      ##then ["--import-map=${importMap}"]
-      ##else []
-    ##)
-    ##++ (allowflag "all")
-    ##++ (allowflag "env")
-    ##++ (allowflag "ffi")
-    ##++ (allowflag "hrtime")
-    ##++ (allowflag "net")
-    ##++ (allowflag "read")
-    ##++ (allowflag "run")
-    ##++ (allowflag "sys")
-    ##++ (allowflag "write")
-    ##++ [additionalDenoFlags]
-    #++ ["${entrypoint}"]
-  #);
+      # "--config=${config}"
+    ]
+    ++ (
+      if (isString importMap)
+      then ["--import-map=${importMap}"]
+      else []
+    )
+    ++ (allowflag "all")
+    ++ (allowflag "env")
+    ++ (allowflag "ffi")
+    ++ (allowflag "hrtime")
+    ++ (allowflag "net")
+    ++ (allowflag "read")
+    ++ (allowflag "run")
+    ++ (allowflag "sys")
+    ++ (allowflag "write")
+    ++ [additionalDenoFlags]
+    ++ ["${entrypoint}"]
+  );
 in
   stdenv.mkDerivation {
     inherit pname version src;
@@ -73,7 +73,7 @@ in
       ln -s "${mkDepsLink (src + "/${lockfile}")}" $(deno info --json | jq -r .modulesCache)
       echo "deno version : ${pkgs.deno.version}"
       mkdir -p $out/bin
-      ${pkgs.deno}/bin/deno compile --import-map="./import_map.json" --output=$out/bin/${bin} $src/${entrypoint}
+      ${compileCmd} --output=$out/bin/${bin} $src/${entrypoint}
       echo "COMPILE FINISHED"
     '';
     dontInstall = true;
