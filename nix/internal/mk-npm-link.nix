@@ -14,6 +14,10 @@ let
 
   # parse org from package name, either "@org/pkg@version" or "pkg@version"
   packageOrg = parts: if (lib.length parts) == 1 then "-" else (lib.head parts);
+  # parse package name, either @org/pkg or pkg from the full (@org)?/pkg@version string
+  packageToParts = package: lib.splitString "@" (lib.head (lib.splitString "_" package));
+  parse = parts: if (lib.length parts) == 3 then "@" + builtins.elemAt parts 1 else (lib.head parts);
+  packageName = package: parse (packageToParts package);
   registry = "registry.npmjs.org";
 
   packageComponents = package: rec {
@@ -65,16 +69,20 @@ let
   # will find all necessary versions that have already been linked by the linkfarm.
   otherVersionsRegistry = (lock: components:
   let
-    lf = importJSON lock;
+    lf = lib.importJSON lock;
   in
   {
-    name = components.name;
+    name = packageName components.package;
     dist-tags.latest = components.version;
     versions = builtins.listToAttrs (
-      map (i:
+      map (package:
         let
-          version = lib.last (lib.splitString "@" i);
-          packageAndVersion = i;
+          packageWithDepsMeta = (lib.length (lib.splitString "_" package)) > 1 && (lib.length (lib.splitString "@" package)) > 2;
+          parts = if packageWithDepsMeta
+            then lib.splitString "/" (lib.head (lib.splitString "_" package))
+            else lib.splitString "/" package;
+          pkg = lib.last parts;
+          version = lib.last (lib.splitString "@" pkg);
         in
         {
           name = version;
@@ -83,10 +91,10 @@ let
             dist = {
               # just put in a fake value
               shasum = "";
-              tarball = packageToUrl components.package;
-              integrity = lf.npm.packages.${packageAndVersion}.integrity;
+              tarball = packageToUrl package;
+              integrity = lf.npm.packages.${package}.integrity;
             };
-            dependencies = lf.npm.packages.${packageAndVersion}.dependencies;
+            dependencies = lf.npm.packages.${package}.dependencies;
             optionalDependencies = {};
             peerDependencies = {};
             peerDependenciesMeta = {};
@@ -97,7 +105,7 @@ let
         }
       )
       (
-        lib.filter (v: (lib.head (lib.splitString "@" v)) == components.package)
+        lib.filter (v: (packageName v) == (packageName components.package))
           (lib.mapAttrsToList (k: v: k) lf.npm.packages)
       )
     );
