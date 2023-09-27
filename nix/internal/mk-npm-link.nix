@@ -27,6 +27,7 @@ let
     # }
     # Even then we also need to handle packages that _do_ have underscores in the name, e.g.
     # string_decoder@1.3.0
+    inherit package;
     packageWithDepsMeta = (lib.length (lib.splitString "_" package)) > 1 && (lib.length (lib.splitString "@" package)) > 2;
     parts = if packageWithDepsMeta
       then lib.splitString "/" (lib.head (lib.splitString "_" package))
@@ -53,6 +54,55 @@ let
   packageToPath = package: (packageComponents package).path;
   packageToUrl = package: (packageComponents package).url;
 
+  # This is where things get brittle...
+  # Basically, anytime there are multiple dependencies on different versions of the same package,
+  # only one of the `registry.json` files will get linked, and this json will not contain the other
+  # version(s) of the package causing deno compile `--cached-only` to fail, complaining of a missing
+  # package that's present in the lockfile.
+  #
+  # So we're going to introspect the lock file here, not knowing which version of this registry.json
+  # we be linked, but making sure each one will include all versions present in the lock file so deno
+  # will find all necessary versions that have already been linked by the linkfarm.
+  otherVersionsRegistry = (lock: components:
+  let
+    lf = importJSON lock;
+  in
+  {
+    name = components.name;
+    dist-tags.latest = components.version;
+    versions = builtins.listToAttrs (
+      map (i:
+        let
+          version = lib.last (lib.splitString "@" i);
+          packageAndVersion = i;
+        in
+        {
+          name = version;
+          value = {
+            version = version;
+            dist = {
+              # just put in a fake value
+              shasum = "";
+              tarball = packageToUrl components.package;
+              integrity = lf.npm.packages.${packageAndVersion}.integrity;
+            };
+            dependencies = lf.npm.packages.${packageAndVersion}.dependencies;
+            optionalDependencies = {};
+            peerDependencies = {};
+            peerDependenciesMeta = {};
+            bin = "";
+            os = [];
+            cpu = [];
+          };
+        }
+      )
+      (
+        lib.filter (v: (lib.head (lib.splitString "@" v)) == components.package)
+          (lib.mapAttrsToList (k: v: k) lf.npm.packages)
+      )
+    );
+  }
+  );
 in
   lockfile: (
     linkFarm "npm" (flatten (
@@ -94,27 +144,30 @@ in
           # since we don't have a shasum for downloading the registry.json, make a fake one
           {
             name = lib.concatStringsSep "/" [registry components.packagePath "registry.json" ];
-            path = writeText "npm-${components.name}-registry.json" (toJSON {
-              name = components.name;
-              dist-tags.latest = components.version;
-              versions.${components.version} = {
-                version = components.version;
-                dist = {
-                  # deno requires the sha1 in the registry.json even though it's not in the lockfile
-                  shasum = hashFile "sha1" src;
-                  tarball = packageToUrl package;
-                  integrity = attributes.integrity;
-                };
-                # TODO: unsure about the rest of these fields
-                dependencies = attributes.dependencies;
-                optionalDependencies = {};
-                peerDependencies = {};
-                peerDependenciesMeta = {};
-                bin = "";
-                os = [];
-                cpu = [];
-              };
-            });
+            path = writeText "npm-${components.name}-registry.json" (toJSON (otherVersionsRegistry lockfile components));
+            #(toJSON {
+              #name = components.name;
+              #dist-tags.latest = components.version;
+              #versions = {
+                #${components.version} = {
+                  #version = components.version;
+                  #dist = {
+                    ## deno requires the sha1 in the registry.json even though it's not in the lockfile
+                    #shasum = hashFile "sha1" src;
+                    #tarball = packageToUrl package;
+                    #integrity = attributes.integrity;
+                  #};
+                  ## TODO: unsure about the rest of these fields
+                  #dependencies = attributes.dependencies;
+                  #optionalDependencies = {};
+                  #peerDependencies = {};
+                  #peerDependenciesMeta = {};
+                  #bin = "";
+                  #os = [];
+                  #cpu = [];
+                #};
+              #};
+            #});
           }
         ]
       )
