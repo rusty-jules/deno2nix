@@ -25,7 +25,12 @@ let
     #     "@aserto/aserto-node@0.23.0": "@aserto/aserto-node@0.23.0_@bufbuild+protobuf@1.3.1",
     #   }
     # }
-    parts = lib.splitString "/" (lib.head (lib.splitString "_" package));
+    # Even then we also need to handle packages that _do_ have underscores in the name, e.g.
+    # string_decoder@1.3.0
+    packageWithDepsMeta = (lib.length (lib.splitString "_" package)) > 1 && (lib.length (lib.splitString "@" package)) > 2;
+    parts = if packageWithDepsMeta
+      then lib.splitString "/" (lib.head (lib.splitString "_" package))
+      else lib.splitString "/" package;
     org = packageOrg parts;
     pkg = lib.last parts;
     name = lib.head (lib.splitString "@" pkg);
