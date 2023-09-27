@@ -13,11 +13,19 @@ let
   inherit (lib.strings) sanitizeDerivationName;
 
   # parse org from package name, either "@org/pkg@version" or "pkg@version"
-  packageOrg = parts: if (lib.length parts) == 1 then "-" else parts[0];
+  packageOrg = parts: if (lib.length parts) == 1 then "-" else (lib.head parts);
   registry = "registry.npmjs.org";
 
   packageComponents = package: rec {
-    parts = lib.splitString "/" package;
+    # deno.lock may contain an underscore after which additional pinned deps
+    # appear, which we can ignore since all dependencies are captured individually
+    # e.g.
+    # "npm": {
+    #   "specifiers": {
+    #     "@aserto/aserto-node@0.23.0": "@aserto/aserto-node@0.23.0_@bufbuild+protobuf@1.3.1",
+    #   }
+    # }
+    parts = lib.splitString "/" (lib.head (lib.splitString "_" package));
     org = packageOrg parts;
     pkg = lib.last parts;
     name = lib.head (lib.splitString "@" pkg);
