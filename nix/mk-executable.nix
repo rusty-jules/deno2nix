@@ -55,7 +55,6 @@
     ++ (allowflag "sys")
     ++ (allowflag "write")
     ++ [additionalDenoFlags]
-    ++ ["${entrypoint}"]
   );
 in
   stdenv.mkDerivation {
@@ -71,9 +70,9 @@ in
       echo $(deno info --json | jq -r .npmCache)
       ln -s "${mkNpmLink (src + "/${lockfile}")}/registry.npmjs.org" $(deno info --json | jq -r .npmCache)
       ln -s "${mkDepsLink (src + "/${lockfile}")}" $(deno info --json | jq -r .modulesCache)
-      echo "deno version : ${pkgs.deno.version}"
+      echo "deno version: ${pkgs.deno.version}"
       mkdir -p $out/bin
-      ${compileCmd} --output=$out/bin/${bin} $src/${entrypoint}
+      ${compileCmd} -o $out/bin/${bin} $src/${entrypoint}
       echo "COMPILE FINISHED"
     '';
     dontInstall = true;

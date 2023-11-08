@@ -58,6 +58,16 @@ let
   packageToPath = package: (packageComponents package).path;
   packageToUrl = package: (packageComponents package).url;
 
+  lockToPackages = lockfile:
+    let
+      lock = importJSON lockfile;
+    in
+    if (lock ? npm)
+      then lock.npm.packages
+      else if (lock ? packages) then
+      lock.packages.npm
+      else {};
+
   # This is where things get brittle...
   # Basically, anytime there are multiple dependencies on different versions of the same package,
   # only one of the `registry.json` files will get linked, and this json will not contain the other
@@ -69,7 +79,7 @@ let
   # will find all necessary versions that have already been linked by the linkfarm.
   otherVersionsRegistry = (lock: components:
   let
-    lf = lib.importJSON lock;
+    packages = lockToPackages lock;
   in
   {
     name = packageName components.package;
@@ -92,9 +102,9 @@ let
               # just put in a fake value
               shasum = "";
               tarball = packageToUrl package;
-              integrity = lf.npm.packages.${package}.integrity;
+              integrity = packages.${package}.integrity;
             };
-            dependencies = lf.npm.packages.${package}.dependencies;
+            dependencies = packages.${package}.dependencies;
             optionalDependencies = {};
             peerDependencies = {};
             peerDependenciesMeta = {};
@@ -106,7 +116,7 @@ let
       )
       (
         lib.filter (v: (packageName v) == (packageName components.package))
-          (lib.mapAttrsToList (k: v: k) lf.npm.packages)
+          (lib.mapAttrsToList (k: v: k) packages)
       )
     );
   }
@@ -179,6 +189,6 @@ in
           }
         ]
       )
-      (importJSON lockfile).npm.packages
+      (lockToPackages lockfile)
     ))
   )
